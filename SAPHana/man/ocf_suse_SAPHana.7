@@ -1,0 +1,348 @@
+.\" Version: 0.148.1
+.\"
+.TH ocf_suse_SAPHana 7 "04 Jun 2014" "" "OCF resource agents"
+.\"
+.SH NAME
+SAPHana \- Manages two single SAP HANA databases with system replication.
+.\"
+.SH SYNOPSYS
+.br
+\fBSAPHana\fP [start | stop | status | monitor | promote | demote | notify | meta\-data | validate\-all | methods | usage ]
+.\"
+.SH DESCRIPTION
+
+\fBSAPHana\fP is a resource agent for SAP HANA databases. It manages a SAP HANA database
+with system replication in an OCF master/slave configuration.
+
+System replication will help to replicate the database data from one computer
+to another computer in order to compensate for database failures.
+With this mode of operation, internal SAP HANA high-availability (HA) mechanisms
+and the resource agent must work together.
+The SAPHana resource agent (RA) performs the actual check of the SAP HANA
+database instances and is configured as a master/slave resource.
+Managing the two SAP HANA instances means that the resource agent controls
+the start/stop of the instances. In addition the resource agent is able to monitor
+the SAP HANA databases on landscape host configuration level.
+For this monitoring the resource agent relies on interfaces provided by SAP.
+
+A third task of the resource agent is to also check the synchronisation status
+of the two SAP HANA databases. If the synchronisation is not "SOK", than the cluster
+avoids to failover to the secondary side, if the primary fails. This is to improve
+the data consistency.
+
+The resource agent uses the following five interfaces provided by SAP:
+
+1. sapcontrol/sapstartsrv
+   The interface sapcontrol/sapstartsrv is used to start/stop a HANA database
+   instance/system
+
+2. landscapeHostConfiguration
+   The interface is used to monitor a HANA system. The python script is named
+   landscapeHostConfiguration.py.
+   landscapeHostConfiguration.py has some detailed output about HANA system status
+   and node roles. For our monitor the overall status is relevant. This overall 
+   status is reported by the returncode of the script:
+   0: Internal Fatal, 1: ERROR, 2: WARNING, 3: INFO, 4: OK
+   The SAPHana resource agent will interpret returncodes 0 as FATAL, 1 as not-running
+   (or ERROR) and and returncodes 2+3+4 as RUNNING.
+
+3. hdbnsutil
+   The interface hdbnsutil is used to check the "topology" of the system replication
+   as well as the current configuration (primary/secondary) of a SAP HANA database
+   instance. A second task of the interface is the posibility to run a system
+   replication takeover (sr_takeover) or to register a former primary to a newer one
+   (sr_register).
+
+4. hdbsql / systemReplicationStatus
+   Interface is SQL query into HANA (system replication table).  The hdbsql query will
+   be replaced by a python script "systemReplicationStatus.py" in SAP HANA SPS8 or 9.
+   As long as wee need to use hdbsql you need to setup secure store users for Linux
+   user root to be able to access the SAP HANA database. You need to configure a secure
+   store user key "SLEHALOC" which can connect the SAP HANA database. 
+
+5. saphostctrl
+   The interface saphostctrl uses the function ListInstances to figure out the virtual
+   host name of the SAP HANA instance. This is the hostname used during the HANA
+   installation.
+.PP
+To make configuring the cluster as simple as possible, the additional
+SAPHanaTopology resource agent runs on all nodes of a SLE 11 HAE cluster and gathers
+information about the statuses and configurations of SAP HANA system replications.
+The SAPHanaTopology RA is designed as a normal (stateless) clone.
+.br
+Please see also the LIMITATIONS section below.
+.\"
+.SH SUPPORTED PARAMETERS
+.br
+This resource agent supports the following parameters:
+.PP
+\fBSID\fR
+.RS 4
+SAP System Identifier. Has to be same on both instances.
+.RE
+.PP
+\fBInstanceNumber\fR
+.RS 4
+Number of the SAP HANA database.
+For system replication also Instance Number+1 is blocked.
+.RE
+.PP
+\fBDIR_EXECUTABLE\fR
+.RS 4
+The full qualified path where to find sapstartsrv and sapcontrol.
+Specify this parameter, if you have changed the SAP kernel directory location
+after the default SAP installation.
+.br
+Optional, well known directories will be searched by default.
+.RE
+.PP
+\fBDIR_PROFILE\fR
+.RS 4
+The full qualified path where to find the SAP START profile.
+Specify this parameter, if you have changed the SAP profile directory location
+after the default SAP installation.
+.br
+Optional, well known directories will be searched by default.
+.RE
+.PP
+\fBINSTANCE_PROFILE\fR
+.RS 4
+The name of the SAP HANA instance profile. Specify this parameter,
+if you have changed the name of the SAP HANA instance profile
+after the default SAP installation.
+Normally you do not need to set this parameter.
+.br
+Optional, well known directories will be searched by default.
+.RE 
+.PP
+\fBPREFER_SITE_TAKEOVER\fR
+.RS 4
+Defines whether RA should prefer to switchover to slave instance instead of restarting master locally.
+.br
+Optional. Default value: true\&.
+.RE
+.PP
+\fBDUPLICATE_PRIMARY_TIMEOUT\fR
+.RS 4
+Time difference needed between two primary time stamps, if a dual-primary situation occurs.
+If the time difference is less than the time gap, than the cluster hold one or both instances
+in a "WAITING" status. This is to give a admin a chance to react on a failover.
+A failed former primary will be registered after the time difference is passed.
+After this registration to the new primary all data will be overwritten by the system
+replication.
+.br
+Optional. Default value: 7200\&.
+.RE
+.PP
+\fBAUTOMATED_REGISTER\fR
+.RS 4
+Defines, whether a former primary instance should be registered automatically
+by the resource agent during cluster/resource start, if the DUPLICATE_PRIMARY_TIMEOUT
+is expired.
+.br
+Default value: false\&.
+.RE
+.PP
+\fBSAPHanaFilter\fR
+.RS 4
+Define SAPHana resource agent messages to be printed.
+This parameter should only be set of been requested by support engineers.
+The default is sufficient for normal operation.
+.br
+Optional.
+.RE
+.PP
+.\"
+.SH SUPPORTED ACTIONS
+.br
+This resource agent supports the following actions (operations):
+.PP
+\fBstart\fR
+.RS 4
+Starts the HANA instance or bring the "clone instance" to a WAITING status.
+Suggested minimum timeout: 3600\&.
+.RE
+.PP
+\fBstop\fR
+.RS 4
+Stops the HANA instance. 
+Suggested minimum timeout: 3600\&.
+.RE
+.PP
+\fBpromote\fR
+.RS 4
+Either runs a takeover for a secondary or a just-nothing for a primary.
+Suggested minimum timeout: 320\&.
+.RE
+.PP
+\fBdemote\fR
+.RS 4
+Nearly does nothing and just mark the instance as demoted.
+Suggested minimum timeout: 320\&.
+.RE
+.PP
+\fBnotify\fR
+.RS 4
+Always returns SUCCESS.
+Suggested minimum timeout: 10\&.
+.RE
+.PP
+\fBstatus\fR
+.RS 4
+Reports whether the HANA instance is running.
+Suggested minimum timeout: 60\&.
+.RE
+.PP
+\fBmonitor (Master role)\fR
+.RS 4
+Reports whether the HANA instance seems to be working in master/slave it
+also needs to check the system replication status.
+Suggested minimum timeout: 700\&.
+Suggested interval: 60\&.
+.RE
+.PP
+\fBmonitor (Slave role)\fR
+.RS 4
+Reports whether the HANA instance seems to be working in master/slave it
+also needs to check the system replication status.
+Suggested minimum timeout: 700\&.
+Suggested interval: 61\&.
+.RE
+.PP
+\fBvalidate\-all\fR
+.RS 4
+Reports whether the parameters are valid.
+Suggested minimum timeout: 5\&.
+.RE
+.PP
+\fBmeta\-data\fR
+.RS 4
+Retrieves resource agent metadata (internal use only).
+Suggested minimum timeout: 5\&.
+.RE
+.PP
+\fBmethods\fR
+.RS 4
+Suggested minimum timeout: 5\&.
+.RE
+.PP
+.\"
+.SH RETURN CODES
+.br
+The return codes are defined by the OCF cluster framework.
+Please refer to the OCF definition on the website mentioned below. 
+
+In addition, log entries are written, which can be scanned by using a pattern
+like "SAPHana.*RA.*rc=[1-7,9]".
+.PP
+.\"
+.SH EXAMPLES
+.PP
+* Below is an example configuration for a SAPHana resource.
+.RS 2 
+In addition, a SAPHanaTopology resource is needed to make this work.
+.RE
+.PP
+.RS 4
+primitive rsc_SAPHana_SLE_HDB00 ocf:suse:SAPHana \\
+.br
+operations $id="rsc_sap_SLE_HDB00-operations" \\
+.br
+op start interval="0" timeout="3600" \\
+.br
+op stop interval="0" timeout="3600" \\
+.br
+op promote interval="0" timeout="3600" \\
+.br
+op monitor interval="60" role="Master" timeout="700" \\
+.br
+op monitor interval="61" role="Slave" timeout="700" \\
+.br
+params SID="SLE" InstanceNumber="00" PREFER_SITE_TAKEOVER="true" \\
+.br
+DUPLICATE_PRIMARY_TIMEOUT="7200" AUTOMATED_REGISTER="false"
+.PP
+ms msl_SAPHana_SLE_HDB00 rsc_SAPHana_SLE_HDB00 \\
+.br
+clone-max="2" clone-node-max="1"
+.RE
+.TP
+* Search for log entries of the resource agent:
+.PP
+.RS 4
+# grep "SAPHana.*RA.*rc=[1-7,9]" /var/log/messages
+.\" TODO: output
+.RE
+.PP
+* Check for working NTP service:
+.PP
+.RS 4
+# ntpq -p
+.\" TODO:
+.\"     remote           refid      st t when poll reach   delay   offset  jitter
+.\"==============================================================================
+.\" LOCAL(0)        .LOCL.          10 l   29   64  177    0.000    0.000   0.001
+.\"*129.70.132.32   129.70.130.71    2 u   25   64  177   24.844  -25796.   9.929
+.\"+141.30.228.4    5.9.110.236      3 u   32   64   77   37.789  -25795.   4.910
+.RE
+.PP
+.\"
+.SH FILES
+.TP
+/usr/lib/ocf/resource.d/suse/SAPHana
+    the resource agent itself
+.TP
+/usr/lib/ocf/resource.d/suse/SAPHanaTopology
+    the also needed topology resource agent
+.TP
+/usr/sap/$SID/$InstanceName/exe
+    default path for DIR_EXECUTABLE
+.TP
+/usr/sap/$SID/SYS/profile
+    default path for DIR_PROFILE
+.\"
+.\" TODO: INSTANCE_PROFILE
+.\"
+.SH LIMITATIONS
+.br
+For the current version of the SAPHana resource agent software package the
+support is limited to the following scenarios and parameters:
+.br
+1. Two-node clusters with single-box to single-box system replication.
+.br
+2. Technical users and groups such as sidadm are defined locally in the Linux system.
+.br
+3. Time synchronization between the cluster nodes using NTP.
+.br
+4. There is no other SAP HANA system (like QA) on the replicating node which needs
+to be stopped during takeover.
+.br
+5. Only one system replication for the SAP HANA database.
+.br
+6. Both SAP HANA instances have the same SAP Identifier (SID) and Instance Number.
+.br
+7. Beside SAP HANA you need SAP hostagent to be installed on your system.
+.br
+8. Automated start of SAP HANA instances during system boot must be switched off.
+.br
+9. The current resource agent supports SAP HANA in System replication beginning
+with HANA version 1.0 SPS 7 patch level 70.
+.\"
+.SH SEE ALSO
+.br
+\fBocf_suse_SAPHanaTopology\fP(7) , \fBntp.conf\fP(5) , 
+https://www.suse.com/products/sles-for-sap/resource-library/sap-best-practices.html ,
+http://clusterlabs.org/doc/en-US/Pacemaker/1.1/html/Pacemaker_Explained/s-ocf-return-codes.html
+.\"
+.SH AUTHORS
+.br
+F.Herschel, L.Pinne.
+.\"
+.SH COPYRIGHT
+(c) 2014 SUSE Linux Products GmbH, Germany.
+.br
+The resource agent SAPHana comes with ABSOLUTELY NO WARRANTY.
+.br
+For details see the GNU General Public License at
+http://www.gnu.org/licenses/gpl.html
+.\"
