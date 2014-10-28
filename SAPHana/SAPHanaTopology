@@ -655,7 +655,12 @@ function sht_monitor_clone() {
     case "$hanaPrim" in
        P ) ;;
        S ) # only secondary may propargate its sync status
-        for n in $(crm_node -l | awk '/member/ {print $2}'); do
+        case $(crm_attribute --type crm_config --name cluster-infrastructure -q) in
+           *openais* ) nodelist=$(crm_node -l | awk '/member/ {print $2}');;    
+           *cman*    ) nodelist=$(crm_node -l);; 
+        esac
+
+        for n in ${nodelist}; do
            set_hana_attribute ${n} "$srmode" ${ATTR_NAME_HANA_SRMODE[@]}
         done
           ;;
