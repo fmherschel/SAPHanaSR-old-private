@@ -292,11 +292,7 @@ function remoteHost2remoteNode()
     local remoteHost="$1"
     local remoteNode=""
     local rc=1
-    case $(crm_attribute --type crm_config --name cluster-infrastructure -q) in    
-       *openais* ) clusterNodes=($(crm_node -l | awk '$3 == "member" { if ($2 != me) { print $2 }}' me=${NODENAME}));;
-       *cman*    ) clusterNodes=($(crm_node -l | awk '{for (i=1; i<=NF; i++) { if ($i != me) { print $i }}}' me=${NODENAME}));;
-    esac
-    for cl in ${clusterNodes[@]}; do
+    for cl in ${otherNodes[@]}; do
         vHost=$(get_hana_attribute $cl  ${ATTR_NAME_HANA_VHOST[@]})
         if [ "$vHost" = "$remoteHost" ]; then # we found the correct node
             remoteNode=$cl
@@ -480,7 +476,7 @@ function get_crm_master()
 # function: saphana_init - initialize variables for the resource agent
 # params:   InstanceName
 # globals:  OCF_*(r), SID(w), sid(rw), sidadm(w), InstanceName(w), InstanceNr(w), SAPVIRHOST(w), PreferSiteTakeover(w), 
-# globals:  sr_name(w), remoteHost(w) 
+# globals:  sr_name(w), remoteHost(w), otherNodes(w) 
 # globals:  ATTR_NAME_HANA_SYNC_STATUS(w), ATTR_NAME_HANA_CLONE_STATE(w)
 # globals:  DIR_EXECUTABLE(w), SAPSTARTSRV(w), SAPCONTROL(w), DIR_PROFILE(w), SAPSTARTPROFILE(w), LD_LIBRARY_PATH(w), PATH(w)
 # globals:  LPA_DIRECTORY(w), SIDInstanceName(w), remoteNode(w)
@@ -559,19 +555,21 @@ function saphana_init() {
     #
     DUPLICATE_PRIMARY_TIMEOUT="${OCF_RESKEY_DUPLICATE_PRIMARY_TIMEOUT:-7200}"
     super_ocf_log debug "DBG: DUPLICATE_PRIMARY_TIMEOUT=$DUPLICATE_PRIMARY_TIMEOUT"
-    #
+    
+    # Determine list of other cluster nodes and store in otherNodes variable
+    case $(crm_attribute --type crm_config --name cluster-infrastructure -q) in
+       *openais* ) otherNodes=($(crm_node -l | awk '$3 == "member" { if ($2 != me) { print $2 }}' me=${NODENAME}));;
+       *cman*    ) otherNodes=($(crm_node -l | awk '{for (i=1; i<=NF; i++) { if ($i != me) { print $i }}}' me=${NODENAME}));;
+    esac
+
     remoteHost=$(get_hana_attribute ${NODENAME} ${ATTR_NAME_HANA_REMOTEHOST[@]});
     if [ -z "$remoteHost" ]; then
-       case $(crm_attribute --type crm_config --name cluster-infrastructure -q) in
-          *openais* ) remoteHosts=($(crm_node -l | awk '$3 == "member" { if ($2 != me) { print $2 }}' me=${NODENAME}));;
-          *cman*    ) remoteHosts=($(crm_node -l | awk '{for (i=1; i<=NF; i++) { if ($i != me) { print $i }}}' me=${NODENAME}));;
-       esac
-       if [ ${#remoteHosts[@]} -eq 1 ]; then # we are a 2 node cluster, lets assume the other is the remote-host
-          remoteHost=${remoteHosts[0]}
+       if [ ${#otherNodes[@]} -eq 1 ]; then # we are a 2 node cluster, lets assume the other is the remote-host
+          remoteHost=${otherNodes[0]}
           remoteNode=$remoteHost
           super_ocf_log debug "DBG: auto-guess remoteHost=$remoteHost"
        else
-          super_ocf_log debug "DBG: Could not auto-guess remoteHost out of list (${remoteHosts[@]})"
+          super_ocf_log debug "DBG: Could not auto-guess remoteHost out of list (${otherNodes[@]})"
        fi
     else
         #
@@ -817,12 +815,8 @@ function analyze_hana_sync_status()
                      # we have a broken secondary site - set all hosts to "SFAIL"
                      #
                      # Note: since HANA hostname can be different from nodename we need to check all vhost attributes
-                     case $(crm_attribute --type crm_config --name cluster-infrastructure -q) in
-                        *openais* ) clusterNodes=($(crm_node -l | awk '$3 == "member" { if ($2 != me) { print $2 }}' me=${NODENAME}));;
-                        *cman*    ) clusterNodes=($(crm_node -l | awk '{for (i=1; i<=NF; i++) { if ($i != me) { print $i }}}' me=${NODENAME}));;
-                     esac
                      for n in $all_broken_secondary_hosts; do
-                         for cl in ${clusterNodes[@]}; do
+                         for cl in ${otherNodes[@]}; do
                              vHost=$(get_hana_attribute $cl  ${ATTR_NAME_HANA_VHOST[@]})
                              if [ "$vHost" = "$n" ]; then # we found the correct node
                                 set_hana_attribute $cl "SFAIL" ${ATTR_NAME_HANA_SYNC_STATUS[@]}
@@ -839,11 +833,7 @@ function analyze_hana_sync_status()
                 # DONE: PRIO1: We should NOT set SFAIL, if HDB is exactly broken now
                 #       When HDB breaks during monitor this could prevent a prositive remote failover
                 super_ocf_log warn "ACT: Was not able to fetch HANA SYNC STATUS - set sync status to SFAIL for ALL OTHER cluster hosts"
-                case $(crm_attribute --type crm_config --name cluster-infrastructure -q) in
-                   *openais* ) all_cluster_hosts=$(crm_node -Q -l -A | awk '($3 == "member") && ($2 != lh)  { print $2 }' lh=${NODENAME});;
-                   *cman*    ) all_cluster_hosts=$(crm_node -l | awk '{for (i=1; i<=NF; i++) { if ($i != me) { print $i }}}' me=${NODENAME});;
-                esac
-                for n in $all_cluster_hosts; do
+                for n in $otherNodes; do
                     set_hana_attribute "$n" "SFAIL" ${ATTR_NAME_HANA_SYNC_STATUS[@]}
                 done
                 ;;
@@ -1144,12 +1134,8 @@ check_for_primary_master()
     #
     # get actual list of cluster members
     # 
-    case $(crm_attribute --type crm_config --name cluster-infrastructure -q) in
-       *openais* ) otherHosts=($(crm_node -l | awk '$3 == "member" { if ($2 != me) { print $2 }}' me=${NODENAME}));;
-       *cman*    ) otherHosts=($(crm_node -l | awk '{for (i=1; i<=NF; i++) { if ($i != me) { print $i }}}' me=${NODENAME}));;
-    esac
-    if [ -n "$otherHosts" ]; then
-        for ch in ${otherHosts[@]}; do
+    if [ -n "$otherNodes" ]; then
+        for ch in ${otherNodes[@]}; do
             if [ $rc -eq 1 ]; then
                 ch_role=$(get_hana_attribute ${ch} ${ATTR_NAME_HANA_ROLES[@]})
 # TODO: PRIO3: check if [0-9], [234] or [34] is correct
