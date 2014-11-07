@@ -497,7 +497,7 @@ function saphana_init() {
     super_ocf_log debug "DBG: Used new method to get SID ($SID) and InstanceNr ($InstanceNr)"
     sid=$(echo "$SID" | tr [:upper:] [:lower:])
     sidadm="${sid}adm"
-    # DONE: PRIO4: SAPVIRHOST might be different to HOSTNAME
+    # DONE: PRIO4: SAPVIRHOST might be different to NODENAME
     # DONE: PRIO1: ASK: Is the output format of ListInstances fix? Could we take that as an API? Answer: Yes
     # try to catch:  Inst Info : LNX - 42 - lv9041 - 740, patch 36, changelist 1444691
     # We rely on the following format: SID is word#4, NR is work#6, vHost is word#8
@@ -507,7 +507,7 @@ function saphana_init() {
        #
        # if saphostctrl does not know the answer, try to fallback to attribute provided by SAPHanaTopology
        #
-       vName=$(get_hana_attribute ${HOSTNAME} ${ATTR_NAME_HANA_VHOST[@]});
+       vName=$(get_hana_attribute ${NODENAME} ${ATTR_NAME_HANA_VHOST[@]});
     fi
     SAPVIRHOST=${vName}
     PreferSiteTakeover="$OCF_RESKEY_PREFER_SITE_TAKEOVER"
@@ -572,8 +572,8 @@ function saphana_init() {
     remoteHost=$(get_hana_attribute ${NODENAME} ${ATTR_NAME_HANA_REMOTEHOST[@]});
     if [ -z "$remoteHost" ]; then
        case $(crm_attribute --type crm_config --name cluster-infrastructure -q) in
-          *openais* ) remoteHosts=($(crm_node -l | awk '$3 == "member" { if ($2 != me) { print $2 }}' me=${HOSTNAME}));;
-          *cman*    ) remoteHosts=($(crm_node -l | awk '{for (i=1; i<=NF; i++) { if ($i != me) { print $i }}}' me=${HOSTNAME}));;
+          *openais* ) remoteHosts=($(crm_node -l | awk '$3 == "member" { if ($2 != me) { print $2 }}' me=${NODENAME}));;
+          *cman*    ) remoteHosts=($(crm_node -l | awk '{for (i=1; i<=NF; i++) { if ($i != me) { print $i }}}' me=${NODENAME}));;
        esac
        if [ ${#otherNodes[@]} -eq 1 ]; then # we are a 2 node cluster, lets assume the other is the remote-host
           remoteHost=${otherNodes[0]}
