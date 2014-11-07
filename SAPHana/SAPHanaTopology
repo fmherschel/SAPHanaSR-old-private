@@ -659,9 +659,9 @@ function sht_monitor_clone() {
         | awk '$4 == SID && $6=NR { print $8 }' SID=$SID NR=$InstanceNr 2>/dev/null )
     super_ocf_log debug "DBG: ListInstances: $(/usr/sap/hostctrl/exe/saphostctrl -function ListInstances)"
     if [ -n "$vName" ]; then
-       set_hana_attribute ${HOSTNAME} "$vName" ${ATTR_NAME_HANA_VHOST[@]} 
+       set_hana_attribute ${NODENAME} "$vName" ${ATTR_NAME_HANA_VHOST[@]} 
     else
-       vName=$(get_hana_attribute ${HOSTNAME} ${ATTR_NAME_HANA_VHOST[@]})
+       vName=$(get_hana_attribute ${NODENAME} ${ATTR_NAME_HANA_VHOST[@]})
     fi
     #site=$(get_site_name)
     hanaANSWER=$(su - $sidadm -c "python exe/python_support/landscapeHostConfiguration.py" 2>/dev/null); hanalrc="$?" 
