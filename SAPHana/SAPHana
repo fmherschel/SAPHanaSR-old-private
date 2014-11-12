@@ -797,6 +797,7 @@ function analyze_hana_sync_status()
     local n=""
     local hana_sync_status="" what_does_the_chamelion_say=""
     local secUser="slehaLoc"
+    local chkusr;
     local rc=0
     local sqlrc=0
     local query_state='select distinct REPLICATION_STATUS from SYS.M_SERVICE_REPLICATION'
@@ -1165,7 +1166,6 @@ check_for_primary_master()
 {
     super_ocf_log info "FLOW $FUNCNAME ($*)"
     local rc=1
-    local otherHosts
     local ch ch_role
     #
     # get actual list of cluster members
@@ -1526,8 +1526,6 @@ function saphana_start_clone() {
                  lpa_set_lpt  30
              fi
          fi
-         super_ocf_log err  "ACT: Secure store users are missing (see best practice manual how to setup the users)"
-         rc=$OCF_ERR_CONFIGURED
     else
         set_hana_attribute ${NODENAME} "DEMOTED" ${ATTR_NAME_HANA_CLONE_STATE[@]}
         check_for_primary; primary_status=$?
