@@ -132,7 +132,7 @@ function saphana_meta_data() {
 <?xml version="1.0"?>
 <!DOCTYPE resource-agent SYSTEM "ra-api-1.dtd">
 <resource-agent name="SAPHana">
-<version>0.149.2</version>
+<version>0.149.3</version>
 
 <shortdesc lang="en">Manages two SAP HANA instances in system replication (SR).</shortdesc>
 <longdesc lang="en">
@@ -821,7 +821,7 @@ function analyze_hana_sync_status()
 #
 #####################################################################################################
 #
-    secUser=$(check_secstore_users SAPHANA{$SID}SR SLEHALOC RHELHALOC) ; chkusr=$?
+    secUser=$(check_secstore_users SAPHANA${SID}SR SLEHALOC RHELHALOC) ; chkusr=$?
     if [ $chkusr -ne 0 ]; then
         super_ocf_log err  "ACT: Secure store users are missing (see best practice manual how to setup the users)"
         rc=$OCF_ERR_CONFIGURED
