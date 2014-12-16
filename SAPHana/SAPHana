@@ -1343,10 +1343,12 @@ function lpa_set_lpt() {
 function lpa_pull_lpt() {
     super_ocf_log info "FLOW $FUNCNAME ($*)"
     local rc=1
-    local lpt=-1
+    local lpt=""
     local readrest=0
     local lpa_file=$LPA_DIRECTORY/lpa_${sid}_${NODENAME}
-    read lpt readrest <<<$(cat $lpa_file) # exactly load first word from file to lpt
+    if [ -f $lpa_file ]; then
+        read lpt readrest <<<$(cat $lpa_file) # exactly load first word from file to lpt
+    fi
     if [ -n "$lpt" ]; then
         rc=0
         echo $lpt
