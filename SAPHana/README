@@ -1,12 +1,9 @@
 I. Installation
-Just install the package SAPHanaSR (and SAPHanaSR-doc). Please follow the
-instructions of the Setup-Guide published in our web site at
-https://www.suse.com/products/sles-for-sap/resource-library/ (in the near
-future) and also in the package SAPHanaSR-doc. In addition please check, if there
-will be additional notes and findings in a SAP Note with component BC-OP-LNX-SUSE
-(we will update this readme with the SAP Note number, when such a SAP Note will
-be created).
-
+Install the resource agents SAPHana and SAPHanaTopology in the standard resource 
+agents location of your pacemaker installation (normally 
+/usr/lib/ocf/resource.d/heartbeat).
+Please follow the instructions in the Setup Guide provided by your
+Linux Distribution.
 
 II. Supported Scenarios and Prerequisites
 For the first version of the SAPHanaSR resource agent software package we limit
