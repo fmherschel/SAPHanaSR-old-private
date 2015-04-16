@@ -356,7 +356,8 @@ function get_hana_attribute()
     local attr_node=$1
     local attr_name=$2
     local attr_store=${3:-reboot} # DONE: PRIO5 get this (optional) from parameter
-    crm_attribute -N ${attr_node} -G -n "$attr_name" -l $attr_store -q; rc=$?
+    local attr_default=${4:-}
+    crm_attribute -N ${attr_node} -G -n "$attr_name" -l $attr_store -q -d "$attr_default"; rc=$?
     super_ocf_log info "FLOW $FUNCNAME rc=$rc"
     return $rc
 }
@@ -373,9 +374,10 @@ function set_hana_attribute()
     local attr_value=$2
     local attr_name=$3
     local attr_store=${4:-reboot} # DONE: PRIO5 get this (optional) from parameter
+    local attr_default=${5:-}
     local rc=1
     local attr_old=""
-    attr_old=$(get_hana_attribute $attr_node $attr_name $attr_store); get_rc=$?
+    attr_old=$(get_hana_attribute $attr_node $attr_name $attr_store $attr_default); get_rc=$?
     if [ "$attr_old" != "$attr_value" ]; then
         super_ocf_log debug "DBG: SET attribute $attr_name for node ${attr_node} to ${attr_value} former ($attr_old) get_rc=$get_rc "
         crm_attribute -N $attr_node -v $attr_value -n "$attr_name" -l $attr_store; rc=$?
@@ -578,8 +580,8 @@ function saphana_init() {
     remoteHost=$(get_hana_attribute ${NODENAME} ${ATTR_NAME_HANA_REMOTEHOST[@]});
     if [ -z "$remoteHost" ]; then
        if [ ${#otherNodes[@]} -eq 1 ]; then # we are a 2 node cluster, lets assume the other is the remote-host
-          remoteHost=${otherNodes[0]}
-          remoteNode=$remoteHost
+          remoteNode=${otherNodes[0]}
+          remoteHost=$(get_hana_attribute $remoteNode ${ATTR_NAME_HANA_VHOST[@]} "$remoteNode");
           super_ocf_log debug "DBG: auto-guess remoteHost=$remoteHost"
        else
           super_ocf_log debug "DBG: Could not auto-guess remoteHost out of list (${otherNodes[@]})"
