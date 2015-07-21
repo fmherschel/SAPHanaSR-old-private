@@ -399,7 +399,7 @@ function sht_init() {
         dstr=$(date)
         echo "$dstr: SAPHanaTopology: srmode=$srmode" >> /var/log/fhATTRIBUTE
     fi
-    MAPPING=$(echo "$hdbANSWER" | awk -F[=/] '$1 ~ "mapping" && $3 !~ site { print $4 }' site=$site)
+    MAPPING=$(echo "$hdbANSWER" | awk -F[=/] '$1 == "mapping" && $3 != site { print $4 }' site=$site)
     super_ocf_log debug "DBG: site=$site, mode=$srmode, MAPPING=$MAPPING"
     #
     # filter all non-cluster mappings
