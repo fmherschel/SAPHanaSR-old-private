@@ -544,9 +544,9 @@ function saphana_init() {
     # DONE: PRIO4: SAPVIRHOST might be different to NODENAME
     # DONE: PRIO1: ASK: Is the output format of ListInstances fix? Could we take that as an API? Answer: Yes
     # try to catch:  Inst Info : LNX - 42 - lv9041 - 740, patch 36, changelist 1444691
-    # We rely on the following format: SID is word#4, NR is work#6, vHost is word#8
+    # We rely on the following format: SID is word#4, SYSNR is work#6, vHost is word#8
     vName=$(/usr/sap/hostctrl/exe/saphostctrl -function ListInstances \
-        | awk '$4 == SID && $6=NR { print $8 }' SID=$SID NR=$InstanceNr)
+        | awk '$4 == SID && $6 == SYSNR { print $8 }' SID=$SID SYSNR=$InstanceNr)
     if [ -z "$vName" ]; then
        #
        # if saphostctrl does not know the answer, try to fallback to attribute provided by SAPHanaTopology
@@ -1320,7 +1320,7 @@ check_for_primary_master()
 #                grep '[34]:P:[^:]*:master:' <<< $ch_role && rc=0
 #               Match "Running+Available Primary" Master -> Match field 1: 3/4, 2: P, 4: master 
                 awk -F: 'BEGIN { rc=1 } 
-                         $1 ~ "[34]" && $2 ="P" && $4="master" { rc=0 } 
+                         $1 ~ "[34]" && $2 == "P" && $4 == "master" { rc=0 } 
                          END { exit rc }' <<< $ch_role  ; rc=$? 
             fi
         done
