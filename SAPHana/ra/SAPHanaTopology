@@ -24,6 +24,7 @@
 #   OCF_RESKEY_InstanceNumber (00..99)
 #	OCF_RESKEY_DIR_EXECUTABLE   (optional, well known directories will be searched by default)
 #   OCF_RESKEY_SAPHanaFilter    (outdated, replaced by cluster property hana_${sid}_glob_filter)
+#   OCF_RESKEY_ontimeout_script (optional, for debugging only, script that is run when HANA_CALL times out)
 #
 #######################################################################
 #
@@ -181,6 +182,11 @@ SAPHanaTopology scans the output table of landscapeHostConfiguration.py to ident
     <parameter name="SAPHanaFilter" unique="0" required="0">
         <shortdesc lang="en">OUTDATED</shortdesc>
         <longdesc lang="en">OUTDATED</longdesc>
+        <content type="string" default="" />
+    </parameter>
+    <parameter name="ontimeout_script" unique="0" required="0">
+        <longdesc lang="en">(for debugging only) Script that is executed when HANA_CALL times out. Script will run in the same environment as the command that has timed out. Output from the script is logged in DEBUG logs.</longdesc>
+        <shortdesc lang="en">Script that is run when HANA_CALL times out.</shortdesc>
         <content type="string" default="" />
     </parameter>
 </parameters>
@@ -380,7 +386,7 @@ function HANA_CALL()
     #       root-user-called hdbnsutil -sr_state (which creates root-owned shared memory file in /var/lib/hdb/SID/shmgrp)
     # TODO: PRIO 5: Maybe make "su" optional by a parameter
     local timeOut=0
-    local onTimeOut=""
+    local onTimeOut="$OCF_RESKEY_ontimeout_script"
     local rc=0
     local use_su=1 # Default to be changed later (see TODO above)
     local pre_cmd=""
@@ -421,7 +427,9 @@ function HANA_CALL()
                   #
                   if [ $rc -eq 124 -a -n "$onTimeOut" ]; then
                       local second_output=""
-                      second_output=$($pre_cmd "$pre_script; /usr/sap/$SID/$InstanceName/HDBSettings.sh $onTimeOut");
+                      super_ocf_log debug "DBG: HANA_CALL running ontimeout script '$onTimeOut'"
+                      second_output=$($pre_cmd "$pre_script; /usr/sap/$SID/$InstanceName/HDBSettings.sh $onTimeOut"); rc2=$?
+                      super_ocf_log debug "DBG: HANA_CALL ontimeout '$onTimeOut' rc=$rc2 output=$second_output"
                   fi
                   ;;
     esac
