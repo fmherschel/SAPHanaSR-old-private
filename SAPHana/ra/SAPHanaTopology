@@ -752,17 +752,20 @@ function sht_stop() {
 # sht_monitor: Can the given SAP instance do anything useful?
 #
 function sht_monitor() {
-  super_ocf_log info "FLOW $FUNCNAME ($*)"
-  local rc=0
-
-  if [ -f $HA_RSCTMP/SAPHana/SAPTopologyON.${SID} ]; then
-     rc=$OCF_SUCCESS
-  else
-     rc=$OCF_NOT_RUNNING
-  fi
-
-  super_ocf_log info "FLOW $FUNCNAME rc=$rc"
-  return $rc
+    super_ocf_log info "FLOW $FUNCNAME ($*)"
+    local rc=0
+    # check for old status file
+    if [ -f $HA_RSCTMP/SAPHana/SAPTopologyON ]; then
+        rm $HA_RSCTMP/SAPHana/SAPTopologyON
+        touch $HA_RSCTMP/SAPHana/SAPTopologyON.${SID}
+    fi
+    if [ -f $HA_RSCTMP/SAPHana/SAPTopologyON.${SID} ]; then
+        rc=$OCF_SUCCESS
+    else
+        rc=$OCF_NOT_RUNNING
+    fi
+    super_ocf_log info "FLOW $FUNCNAME rc=$rc"
+    return $rc
 }
 
 
