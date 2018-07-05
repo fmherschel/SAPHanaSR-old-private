@@ -1,0 +1,27 @@
+SAP HANA System Replication (Scale-Up)
+=====================================
+
+SAPHanaSR - Tools for automating SAP HANA system replication in scale-up setups.
+
+The  SAPHanaSR  package  provides  resource  agents (RA) and tools for setting up and managing automation of SAP HANA system replication (SR) in scale-up setups.
+System replication will help to replicate the database data from one site to another site in order to compensate for database failures. With this mode of  opera-
+tion, internal SAP HANA high-availability (HA) mechanisms and the Linux cluster have to work together.
+
+The  SAPHana  RA  performs the actual check of the SAP HANA database instances and is configured as a master/slave resource.  Managing the two SAP HANA instances
+means that the resource agent controls the start/stop of the instances. In addition the resource agent is able to monitor the SAP  HANA  databases  on  landscape
+host  configuration level.  For this monitoring the resource agent relies on interfaces provided by SAP.  As long as the HANA landscape status is not "ERROR" the
+Linux cluster will not act. The main purpose of the Linux cluster is to handle the take-over to the other site. Only if the HANA landscape status indicates  that
+HANA can not recover from the failure and the replication is in sync, then Linux will act.
+
+An important task of the resource agent is to check the synchronisation status of the two SAP HANA databases. If the synchronisation is not "SOK", then the clus-
+ter avoids to takeover to the secondary side, if the primary fails. This is to improve the data consistency.
+
+Note: To automate SAP HANA SR in scale-out setups, please use the package SAPHanaSR-ScaleOut.
+
+File structure
+--------------
+
+* `SAPHana` directory for Scale-Up
+** `ra` contains the actual resource agents, `SAPHana` and `SAPHanaTopology`;
+** `tools` contains the Perl auxiliary library and tools
+

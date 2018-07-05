@@ -16,7 +16,7 @@
 # Support:      linux@sap.com
 # License:      GNU General Public License (GPL)
 # Copyright:    (c) 2013,2014 SUSE Linux Products GmbH
-#               (c) 2015-2016 SUSE Linux GmbH
+#               (c) 2015-2017 SUSE Linux GmbH
 #
 # An example usage:
 #      See usage() function below for more details...
@@ -35,7 +35,7 @@
 #######################################################################
 #
 # Initialization:
-SAPHanaVersion="0.152.17"
+SAPHanaVersion="0.152.21"
 timeB=$(date '+%s')
 
 : ${OCF_FUNCTIONS_DIR=${OCF_ROOT}/lib/heartbeat}
@@ -133,8 +133,8 @@ EOF
 function backup_global_and_nameserver() {
     super_ocf_log info "FLOW $FUNCNAME ($*)"
     local rc=0
-    cp /hana/shared/LNX/global/hdb/custom/config/global.ini /hana/shared/LNX/global/hdb/custom/config/global.ini.$(date +"%s")
-    cp /hana/shared/LNX/global/hdb/custom/config/nameserver.ini /hana/shared/LNX/global/hdb/custom/config/nameserver.ini.$(date +"%s")
+    cp /hana/shared/${SID}/global/hdb/custom/config/global.ini /hana/shared/${SID}/global/hdb/custom/config/global.ini.$(date +"%s")
+    cp /hana/shared/${SID}/global/hdb/custom/config/nameserver.ini /hana/shared/${SID}/global/hdb/custom/config/nameserver.ini.$(date +"%s")
     super_ocf_log info "FLOW $FUNCNAME rc=$rc"
     return $rc
 }
@@ -545,6 +545,9 @@ scoring_crm_master()
             read rolePatt syncPatt score <<< $scan
             if grep "$rolePatt" <<< "$roles"; then
                if grep "$syncPatt" <<< "$sync"; then
+                  super_ocf_log info "SCORE: scoring_crm_master: roles($roles) are matching pattern ($rolePatt)"
+                  super_ocf_log info "SCORE: scoring_crm_master: sync($sync) is  matching syncPattern ($syncPatt)"
+                  super_ocf_log info "SCORE: scoring_crm_master: set score $score"
                   skip=1
                   myScore=$score
                fi
@@ -622,12 +625,16 @@ function HANA_CALL()
                   #
                   # on timeout ...
                   #
+                  if [ $rc -eq 124 ]; then
+                      super_ocf_log warn "HANA_CALL timed out after $timeOut seconds running command '$cmd'"
+                  fi
                   if [ $rc -eq 124 -a -n "$onTimeOut" ]; then
                       local second_output=""
                       second_output=$($pre_cmd "$pre_script; /usr/sap/$SID/$InstanceName/HDBSettings.sh $onTimeOut");
                   fi
                   ;;
     esac
+    super_ocf_log debug "DBG: HANA_CALL '$cmd' rc=$rc output=$output"
     echo "$output"
     return $rc;
 }
@@ -665,7 +672,7 @@ function saphana_init() {
     # DONE: PRIO4: SAPVIRHOST might be different to NODENAME
     # DONE: PRIO1: ASK: Is the output format of ListInstances fix? Could we take that as an API? Answer: Yes
     # try to catch:  Inst Info : LNX - 42 - lv9041 - 740, patch 36, changelist 1444691
-    # We rely on the following format: SID is word#4, SYSNR is work#6, vHost is word#8
+    # We rely on the following format: SID is word#4, SYSNR is word#6, vHost is word#8
     if [ -e /usr/sap/hostctrl/exe/saphostctrl ]; then
         vName=$(/usr/sap/hostctrl/exe/saphostctrl -function ListInstances \
             | awk '$4 == SID && $6 == SYSNR { print $8 }' SID=$SID SYSNR=$InstanceNr 2>/dev/null )
@@ -713,27 +720,29 @@ function saphana_init() {
        "[234]*:P:[^:]*:master .*     150"
        "[015-9]*:P:[^:]*:master .*    90"
        "[0-9]*:P:[^:]*:slave  .*      60"
-       "[0-9]*:P:[^:]*:\?     .*       0"
-       "[0-9]*:P:[^:]*:-      .*       0"
+       "[234]*:P:[^:]*:[?:-]  .*       0"
+       "[015-9]*:P:[^:]*:[?:-]  .*    -1"
        "[234]*:S:[^:]*:master SOK    100"
+       "[234]*:S:[^:]*:master PRIM   100"
        "[015-9]*:S:[^:]*:master SOK   80"
        "[0-9]*:S:[^:]*:master SFAIL  -INFINITY"
        "[0-9]*:S:[^:]*:slave  SOK     10"
        "[0-9]*:S:[^:]*:slave  SFAIL  -INFINITY"
-       "[0-9]*:S:[^:]*:\?     .*    0"
-       "[0-9]*:S:[^:]*:-      .*    0"
-       ".*                    .*   -1"
+       "[234]*:S:[^:]*:[?:-]  .*       0"
+       "[015-9]*:S:[^:]*:[?:-] .*     -1"
+       ".*                    .*      -1"
     )
     SCORING_TABLE_PREFERRED_LOCAL_RESTART=(
-       "[0-9]*:P:[^:]*:master .*  150"
-       "[0-9]*:P:[^:]*:.*     .*  140"
+       "[0-9]*:P:[^:]*:master .*     150"
+       "[0-9]*:P:[^:]*:.*     .*     140"
        "[0-9]*:S:[^:]*:master SOK    100"
+       "[0-9]*:S:[^:]*:master PRIM   100"
        "[0-9]*:S:[^:]*:master SFAIL  -INFINITY"
        "[0-9]*:S:[^:]*:slave  SOK     10"
        "[0-9]*:S:[^:]*:slave  SFAIL  -INFINITY"
-       "[0-9]*:S:[^:]*:\?     .*    0"
-       "[0-9]*:S:[^:]*:-      .*    0"
-       ".*                    .*   -1"
+       "[015-9]*:S:[^:]*:[?:-]  .*    -1"
+       "[234]*:S:[^:]*:[?:-]    .*    -1"
+       ".*                      .*    -1"
     )
     SCORING_TABLE_PREFERRED_NEVER=(
        "[234]*:P:[^:]*:master .*     150"
@@ -1030,7 +1039,7 @@ function analyze_hana_sync_statusSRS()
     # TODO: Limit the runtime of systemReplicationStatus.py
     # SAP_CALL
     # FULL_SR_STATUS=$(su - $sidadm -c "python $DIR_EXECUTABLE/python_support/systemReplicationStatus.py $siteParam" 2>/dev/null); srRc=$?
-    FULL_SR_STATUS=$(HANA_CALL --timeout 60 --cmd "systemReplicationStatus.py" 2>/dev/null); srRc=$?
+    FULL_SR_STATUS=$(HANA_CALL --timeout 60 --cmd "systemReplicationStatus.py $siteParam" 2>/dev/null); srRc=$?
     super_ocf_log info "DEC $FUNCNAME systemReplicationStatus.py (to site '$remSR_name')-> $srRc"
     super_ocf_log info "FLOW $FUNCNAME systemReplicationStatus.py (to site '$remSR_name')-> $srRc"
     #
@@ -1433,6 +1442,10 @@ function saphana_start_primary()
                     lpa_set_lpt $LPTloc $NODENAME
                     ;;
             esac
+            if [ -z "$my_role" ]; then
+                my_role=$(get_hana_attribute ${NODENAME} ${ATTR_NAME_HANA_ROLES[@]})
+            fi
+            super_ocf_log info "SCORE: saphana_start_primary: scoring_crm_master($my_role,$my_sync)" 
             scoring_crm_master "$my_role" "$my_sync"
             ;;
         register ) # process a REGISTER
@@ -2127,6 +2140,7 @@ function saphana_monitor_primary()
                         #super_ocf_log info "DEC: PreferSiteTakeover selected so decrease promotion score here"
                         my_role=$(get_hana_attribute ${NODENAME} ${ATTR_NAME_HANA_ROLES[@]})
                         my_sync=$(get_hana_attribute ${NODENAME} ${ATTR_NAME_HANA_SYNC_STATUS[@]})
+                        super_ocf_log info "SCORE: saphana_monitor_primary: scoring_crm_master($my_role,$my_sync)" 
                         scoring_crm_master "$my_role" "$my_sync"
                         rc=$OCF_FAILED_MASTER
                     fi
@@ -2189,6 +2203,7 @@ function saphana_monitor_primary()
                           ;;
                    esac
                 fi
+                super_ocf_log info "SCORE: saphana_monitor_primary: scoring_crm_master($my_role,$my_sync)" 
                 scoring_crm_master "$my_role" "$my_sync"
             fi
             ;;
@@ -2293,12 +2308,16 @@ function saphana_monitor_secondary()
             hanaFilter1=$(echo "$hanaOut1" | awk -F/ 'BEGIN {out=0} /^SAPCONTROL-OK: <begin>/ { out=1 } /^SAPCONTROL-OK: <end>/ { out=0 } /=/ {if (out==1) {print $3} }')
             hanaOM=$(echo "$hanaFilter1" | awk -F= '$1=="operation_mode" {print $2}')
             set_hana_attribute ${NODENAME} "$hanaOM" ${ATTR_NAME_HANA_OPERATION_MODE[@]}
+            if [ -n "$remoteNode" ]; then
+                set_hana_attribute ${remoteNode} "$hanaOM" ${ATTR_NAME_HANA_OPERATION_MODE[@]} # also set attribute for remoteNode (bsc1082974)
+            fi
             super_ocf_log debug "DBG: sync_attr=$sync_attr"
             case "$sync_attr" in
                 "SOK"   ) # This is a possible node to promote, when primary is missing
                     super_ocf_log info "DEC: secondary with sync status SOK ==> possible takeover node"
                     my_role=$(get_hana_attribute ${NODENAME} ${ATTR_NAME_HANA_ROLES[@]})
                     my_sync=$(get_hana_attribute ${NODENAME} ${ATTR_NAME_HANA_SYNC_STATUS[@]})
+                    super_ocf_log info "SCORE: saphana_monitor_secondary: scoring_crm_master($my_role,$my_sync)" 
                     scoring_crm_master "$my_role" "$my_sync"
                     ;;
                 "SFAIL" ) # This is currently NOT a possible node to promote
@@ -2445,8 +2464,9 @@ function saphana_promote_clone() {
      else
         #
         # neither MASTER nor SLAVE - This clone instance seams to be broken!!
-        #
-        rc=$OCF_ERR_GENERIC
+        # bsc#1027098 - do not stop SAP HANA if "only" HANA state is not correct
+        # Let next monitor find, if that HANA instance is available or not
+        rc=$OCF_SUCCESS;
      fi
   fi
   rc=$?

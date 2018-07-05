@@ -14,7 +14,7 @@
 # Support:      linux@sap.com
 # License:      GNU General Public License (GPL)
 # Copyright:    (c) 2014 SUSE Linux Products GmbH
-#               (c) 2015-2016 SUSE Linux GmbH
+#               (c) 2015-2017 SUSE Linux GmbH
 #
 # An example usage:
 #      See usage() function below for more details...
@@ -28,7 +28,7 @@
 #######################################################################
 #
 # Initialization:
-SAPHanaVersion="0.152.17"
+SAPHanaVersion="0.152.21"
 timeB=$(date '+%s')
 
 : ${OCF_FUNCTIONS_DIR=${OCF_ROOT}/lib/heartbeat}
@@ -419,12 +419,16 @@ function HANA_CALL()
                   #
                   # on timeout ...
                   #
+                  if [ $rc -eq 124 ]; then
+                      super_ocf_log warn "HANA_CALL timed out after $timeOut seconds running command '$cmd'"
+                  fi
                   if [ $rc -eq 124 -a -n "$onTimeOut" ]; then
                       local second_output=""
                       second_output=$($pre_cmd "$pre_script; /usr/sap/$SID/$InstanceName/HDBSettings.sh $onTimeOut");
                   fi
                   ;;
     esac
+    super_ocf_log debug "DBG: HANA_CALL '$cmd' rc=$rc output=$output"
     echo "$output"
     return $rc;
 }
@@ -474,6 +478,7 @@ function sht_init() {
     ATTR_NAME_HANA_SRMODE=("hana_${sid}_srmode" "forever")
     ATTR_NAME_HANA_VHOST=("hana_${sid}_vhost" "forever")
     ATTR_NAME_HANA_STATUS=("hana_${sid}_status" "reboot")
+    ATTR_NAME_HANA_VERSION=("hana_${sid}_version" "reboot")
     #
     # new "central" attributes
     #
@@ -531,7 +536,7 @@ function sht_init() {
     # hdbnsutil was a bit unstable in some tests so we recall the tool, if it fails to report the srmode
     for chkMethod in  hU hU hU gP ; do
         # DONE: Limit the runtime of hdbnsutil.
-        # TODO: Use getParameter.py if we get no answer
+        # DONE: Use getParameter.py if we get no answer
         # SAP_CALL
         #super_ocf_log debug "DBG2: hdbANSWER=$hdbANSWER"
         #srmode=$(echo "$hdbANSWER" | awk -F= '/mode/ {print $2}')
@@ -546,7 +551,6 @@ function sht_init() {
             hU | * ) # call hdbnsUtil (hU) ( also for unknown chkMethod )
                 # DONE: PRIO1: Begginning from SAP HANA rev 112.03 -sr_state is not longer supported
                 hdbANSWER=$(HANA_CALL --timeout 60 --cmd "$hdbState --sapcontrol=1" 2>/dev/null)
-                super_ocf_log debug "DBG2: hdbANSWER=$hdbANSWER"
                 srmode=$(echo "$hdbANSWER" | awk -F= '$1=="mode" {print $2}')
                 ;;
         esac
@@ -565,7 +569,7 @@ function sht_init() {
     siteID=$(echo "$hdbANSWER" | awk -F= '/site.id/ {print $2}')       # allow 'site_id' AND 'site id'
     siteNAME=$(echo "$hdbANSWER" | awk -F= '/site.name/ {print $2}')
     site=$siteNAME
-    srmode=$(echo "$hdbANSWER" | awk -F= '/mode/ {print $2}')
+    srmode=$(echo "$hdbANSWER" | awk -F= '$1=="mode" {print $2}')
     #
     # for rev >= 111 we use the new mapping query
     #
@@ -602,7 +606,18 @@ function sht_init() {
             #       currently having more than 2 HANA in a chain/star members IN the cluster is not allowed, the third must be external
             if [ "$NODENAME" != "$n1" ]; then
                 hanaSite=$(get_hana_attribute ${n1} ${ATTR_NAME_HANA_SITE[@]})
-                hanaRemoteHost="$n1"
+                #
+                # only, if a hanaSite is found use that node - this allows majority makers
+                #
+                if [ -n "$hanaSite" ]; then
+                    hanaRemoteHost=$(get_hana_attribute ${n1} ${ATTR_NAME_HANA_VHOST[@]})
+                    #
+                    # only if vhost is NOT set use the nodename instead
+                    #
+                    if [ -z "$hanaRemoteHost" ]; then
+                   hanaRemoteHost="$n1"
+                    fi
+                fi
             fi
         done
         super_ocf_log info "DEC: site=$site, mode=$srmode, hanaRemoteHost=$hanaRemoteHost - found by remote site ($hanaSite)"
@@ -691,24 +706,27 @@ function check_saphostagent()
 # sht_start : Start the SAP HANA instance
 #
 function sht_start() {
-  super_ocf_log info "FLOW $FUNCNAME ($*)"
+    super_ocf_log info "FLOW $FUNCNAME ($*)"
 
-  local rc=$OCF_NOT_RUNNING
-  local output=""
-  local loopcount=0
+    local rc=$OCF_NOT_RUNNING
+    local output=""
+    local loopcount=0
 
-  # TODO: PRIO3: move the string "$HA_RSCTMP/SAPHana/SAPTopologyON" to a variable
-  # TODO: PRIO3: move the file to the clusters tmp directory?
-  mkdir -p $HA_RSCTMP/SAPHana
-  touch $HA_RSCTMP/SAPHana/SAPTopologyON
-  if ! check_saphostagent; then
-     start_saphostagent
-  fi
+    # TODO: PRIO3: move the string "$HA_RSCTMP/SAPHana/SAPTopologyON" to a variable
+    # TODO: PRIO3: move the file to the clusters tmp directory?
+    mkdir -p $HA_RSCTMP/SAPHana
+    if [ -f $HA_RSCTMP/SAPHana/SAPTopologyON ]; then
+        rm $HA_RSCTMP/SAPHana/SAPTopologyON
+    fi
+    touch $HA_RSCTMP/SAPHana/SAPTopologyON.${SID}
+    if ! check_saphostagent; then
+        start_saphostagent
+    fi
 
-  rc=$OCF_SUCCESS
+    rc=$OCF_SUCCESS
 
-  super_ocf_log info "FLOW $FUNCNAME rc=$rc"
-  return $rc
+    super_ocf_log info "FLOW $FUNCNAME rc=$rc"
+    return $rc
 }
 
 #
@@ -722,7 +740,7 @@ function sht_stop() {
   local output=""
   local rc=0
 
-  rm $HA_RSCTMP/SAPHana/SAPTopologyON
+  rm $HA_RSCTMP/SAPHana/SAPTopologyON.${SID}
   rc=$OCF_SUCCESS
 
   super_ocf_log info "FLOW $FUNCNAME rc=$rc"
@@ -737,17 +755,20 @@ function sht_stop() {
 # sht_monitor: Can the given SAP instance do anything useful?
 #
 function sht_monitor() {
-  super_ocf_log info "FLOW $FUNCNAME ($*)"
-  local rc=0
-
-  if [ -f $HA_RSCTMP/SAPHana/SAPTopologyON ]; then
-     rc=$OCF_SUCCESS
-  else
-     rc=$OCF_NOT_RUNNING
-  fi
-
-  super_ocf_log info "FLOW $FUNCNAME rc=$rc"
-  return $rc
+    super_ocf_log info "FLOW $FUNCNAME ($*)"
+    local rc=0
+    # check for old status file
+    if [ -f $HA_RSCTMP/SAPHana/SAPTopologyON ]; then
+        rm $HA_RSCTMP/SAPHana/SAPTopologyON
+        touch $HA_RSCTMP/SAPHana/SAPTopologyON.${SID}
+    fi
+    if [ -f $HA_RSCTMP/SAPHana/SAPTopologyON.${SID} ]; then
+        rc=$OCF_SUCCESS
+    else
+        rc=$OCF_NOT_RUNNING
+    fi
+    super_ocf_log info "FLOW $FUNCNAME rc=$rc"
+    return $rc
 }
 
 
@@ -845,6 +866,11 @@ function sht_monitor_clone() {
 	if ocf_is_probe; then
 		super_ocf_log debug "DBG2: PROBE ONLY"
         sht_monitor; rc=$?
+        local hana_version=$(HANA_CALL --timeout 10 --cmd "HDB version" \
+            | awk -F':' '$1=="  version" {print $2}; ' | tr -d '[:space:]')
+        if [[ -n $hana_version ]]; then
+            set_hana_attribute "${NODENAME}" "$hana_version" ${ATTR_NAME_HANA_VERSION[@]}
+        fi
 	else
 		super_ocf_log debug "DBG2: REGULAR MONITOR"
         if ! check_saphostagent; then
@@ -871,9 +897,13 @@ function sht_monitor_clone() {
             super_ocf_log debug "DBG2: HANA IS STANDALONE"
             sht_monitor; rc=$?
         else
-            hanaPrim="-"
-            super_ocf_log warn "ACT: sht_monitor_clone: HANA_STATE_DEFECT"
-            rc=$OCF_ERR_CONFIGURED
+            # bsc#1027098 Do not mark HANA instance as failed, if "only" the HANA state could not be detected
+            hanaPrim=$(get_hana_attribute ${NODENAME} ${ATTR_NAME_HANA_ROLES[@]} | awk -F: '{ print $2}')
+            if [ "$hanaPrim" = "" ]; then
+                hanaPrim="-"
+            fi
+            super_ocf_log warn "ACT: sht_monitor_clone: HANA_STATE_DEFECT (primary/secondary state could not be detected at this point of time)"
+            sht_monitor; rc=$?
         fi
     fi
     # DONE: PRIO1: ASK: Is the output format of ListInstances fix? Could we take that as an API?
