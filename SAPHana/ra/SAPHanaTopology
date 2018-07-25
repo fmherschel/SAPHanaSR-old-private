@@ -28,7 +28,7 @@
 #######################################################################
 #
 # Initialization:
-SAPHanaVersion="0.152.21"
+SAPHanaVersion="0.152.22"
 timeB=$(date '+%s')
 
 : ${OCF_FUNCTIONS_DIR=${OCF_ROOT}/lib/heartbeat}
@@ -736,15 +736,17 @@ function sht_start() {
 # sht_stop: Stop the SAP HANA Topology Resource
 #
 function sht_stop() {
-  super_ocf_log info "FLOW $FUNCNAME ($*)"
-  local output=""
-  local rc=0
+    super_ocf_log info "FLOW $FUNCNAME ($*)"
+    local output=""
+    local rc=0
+    if [ -f $HA_RSCTMP/SAPHana/SAPTopologyON ]; then
+        rm $HA_RSCTMP/SAPHana/SAPTopologyON
+    fi
+    rm $HA_RSCTMP/SAPHana/SAPTopologyON.${SID}
+    rc=$OCF_SUCCESS
 
-  rm $HA_RSCTMP/SAPHana/SAPTopologyON.${SID}
-  rc=$OCF_SUCCESS
-
-  super_ocf_log info "FLOW $FUNCNAME rc=$rc"
-  return $rc
+    super_ocf_log info "FLOW $FUNCNAME rc=$rc"
+    return $rc
 }
 
 
