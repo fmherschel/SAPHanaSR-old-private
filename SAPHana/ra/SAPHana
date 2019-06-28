@@ -35,7 +35,7 @@
 #######################################################################
 #
 # Initialization:
-SAPHanaVersion="0.152.21"
+SAPHanaVersion="0.152.23"
 timeB=$(date '+%s')
 
 : ${OCF_FUNCTIONS_DIR=${OCF_ROOT}/lib/heartbeat}
@@ -621,7 +621,7 @@ function HANA_CALL()
                   output=$($pre_cmd "$pre_script; /usr/sap/$SID/$InstanceName/HDBSettings.sh $cmd"); rc=$?
                   ;;
         *       )
-                  output=$(timeout $timeOut $pre_cmd "$pre_script; /usr/sap/$SID/$InstanceName/HDBSettings.sh $cmd"); rc=$?
+                  output=$(timeout --foreground -s 9 $timeOut $pre_cmd "$pre_script; timeout -s 9 $timeOut /usr/sap/$SID/$InstanceName/HDBSettings.sh $cmd"); rc=$?
                   #
                   # on timeout ...
                   #
@@ -1039,7 +1039,7 @@ function analyze_hana_sync_statusSRS()
     # TODO: Limit the runtime of systemReplicationStatus.py
     # SAP_CALL
     # FULL_SR_STATUS=$(su - $sidadm -c "python $DIR_EXECUTABLE/python_support/systemReplicationStatus.py $siteParam" 2>/dev/null); srRc=$?
-    FULL_SR_STATUS=$(HANA_CALL --timeout 60 --cmd "systemReplicationStatus.py $siteParam" 2>/dev/null); srRc=$?
+    FULL_SR_STATUS=$(HANA_CALL --timeout 5 --cmd "systemReplicationStatus.py $siteParam" 2>/dev/null); srRc=$?
     super_ocf_log info "DEC $FUNCNAME systemReplicationStatus.py (to site '$remSR_name')-> $srRc"
     super_ocf_log info "FLOW $FUNCNAME systemReplicationStatus.py (to site '$remSR_name')-> $srRc"
     #
