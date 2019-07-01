@@ -1,4 +1,4 @@
-SAP HANA System Replication (Scale-Up)
+SAP HANA System Replication (Scale-Up) X
 =====================================
 
 SAPHanaSR - Tools for automating SAP HANA system replication in scale-up setups.
